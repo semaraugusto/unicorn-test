@@ -30,8 +30,8 @@ from capstone import (
 )
 
 # md = Cs(CS_ARCH_RISCV, CS_MODE_RISCV64 + CS_MODE_LITTLE_ENDIAN)
-# md = Cs(CS_ARCH_RISCV, CS_MODE_RISCV64 + CS_MODE_LITTLE_ENDIAN)
-md = Cs(CS_ARCH_RISCV, CS_MODE_RISCV32 + CS_MODE_LITTLE_ENDIAN)
+md = Cs(CS_ARCH_RISCV, CS_MODE_RISCV64 + CS_MODE_LITTLE_ENDIAN)
+# md = Cs(CS_ARCH_RISCV, CS_MODE_RISCV32 + CS_MODE_LITTLE_ENDIAN)
 
 """
 $ cstool riscv64 1305100093850502
@@ -53,23 +53,35 @@ def hook_block(uc, address, size, user_data):
 # callback for tracing instructions
 def hook_code(uc, address, size, user_data):
     # print(">>> User data: ", user_data)
-    # print(">>> Tracing instruction at 0x%x, instruction size = 0x%x" % (address, size))
-    data = uc.mem_read(address, size)
-    # for dd in md.disasm(data, address):
-    if len(data) == 0:
-        return
-    for dd in md.disasm(data, address):
-        sp = uc.reg_read(UC_RISCV_REG_SP)
-        print(
-            f"[TRACING] 0x{dd.address:x}:\t{dd.mnemonic}\t{dd.op_str}: sp_val: 0x{sp:x}"
-        )
+    # print(
+    #     ">>> 1 Tracing instruction at 0x%x, instruction size = 0x%x" % (address, size)
+    # )
+    try:
+        data = uc.mem_read(address, size)
+        # print(
+        #     ">>> 2 Tracing instruction at 0x%x, len(data) %x instruction size = 0x%x"
+        #     % (address, len(data), size)
+        # )
+        # for dd in md.disasm(data, address):
+        if len(data) == 0:
+            return
+        for dd in md.disasm(data, address):
+            sp = uc.reg_read(UC_RISCV_REG_SP)
+            print(
+                f"[TRACING] 0x{dd.address:x}:\t{dd.mnemonic}\t{dd.op_str}: sp_val: 0x{sp:x}"
+                # f"[TRACING] 0x{dd.address:x}:\t{dd.mnemonic}\t{dd.op_str}"
+            )
+    except Exception as e:
+        print(f"[TRACING] Error: {e}")
+        pass
 
 
-MAX_PROG_SIZE = 0x800000000
-STACK_ADDR = 0x900000000
+MAX_PROG_SIZE = 0x80000000
+STACK_ADDR = 0x90000000
 
 
 def init_mem(elf_path: Path, uc: Uc):
+    global STACK_ADDR
     elffile = ELFFile(elf_path.open("rb"))
     print("Opening elf file")
     end_addr = 0
@@ -81,14 +93,23 @@ def init_mem(elf_path: Path, uc: Uc):
     prog_dat = bytearray(prog_size)
     print("malloced 0x%x for program" % prog_size)
 
+    entry = 0x0
     for seg in elffile.iter_segments():
         print(seg.header, hex(seg.header.p_vaddr))
+        if seg.header.p_type == "PT_PHDR":
+            # print(seg.header.e_entry)
+            print("loop entrypoint: ", seg.data())
+            # entry = seg.header.p_vaddr
+            print("loading segment")
         prog_dat[seg.header.p_vaddr : seg.header.p_vaddr + len(seg.data())] = seg.data()
     #
     entry = elffile.header.e_entry
+    # entry = elffile.ehdr.e_entry
     print("entrypoint: 0x%x" % entry)
 
+    # uc.mem_map(0, len(bytes(prog_dat)))
     uc.mem_map(0, MAX_PROG_SIZE)
+    # STACK_ADDR = len(bytes(prog_dat)) + 0x100000
     uc.mem_write(0, bytes(prog_dat))
     # for seg in elffile.iter_segments():
     #     print(f"seg: ", seg.header)
@@ -116,9 +137,10 @@ def init_mem(elf_path: Path, uc: Uc):
 
 
 def init_stack(uc: Uc):
+    global STACK_ADDR
     stack_addr = STACK_ADDR
     stack_pointer = stack_addr + 0x100000
-    stack_size = 0x200000
+    stack_size = 0x20000000
     print(f"Mapping stack addr 0x{hex(stack_addr)} - size: {hex(stack_size)}")
     uc.mem_map(stack_addr, stack_size)
     print("[DEBUG] Mapping done!")
@@ -161,10 +183,19 @@ def test_riscv():
     print("Emulate RISCV code")
     try:
         # Initialize emulator in RISCV64 mode
-        # mu = Uc(UC_ARCH_RISCV, UC_MODE_RISCV64 + CS_MODE_LITTLE_ENDIAN)
-        mu = Uc(UC_ARCH_RISCV, UC_MODE_RISCV32 + CS_MODE_LITTLE_ENDIAN)
+        mu = Uc(UC_ARCH_RISCV, UC_MODE_RISCV64 + CS_MODE_LITTLE_ENDIAN)
+        # mu = Uc(UC_ARCH_RISCV, UC_MODE_RISCV32 + CS_MODE_LITTLE_ENDIAN)
 
-        elf_path = Path("riscv")
+        # elf_path = Path("riscv")
+        elf_path = Path(
+            # "riscv"
+            # "../rust-cross/target/riscv32im-succinct-zkvm-elf/release/rust-cross"
+            "../rust-cross/target/riscv64gc-unknown-none-elf/release/rust-cross"
+            # "../rust-cross/target/riscv64gc-unknown-linux-musl/release/rust-cross"
+        )
+        # elf_path = Path(
+        #     "../rust-cross/target/riscv64gc-unknown-linux-musl/release/rust-cross"
+        # )
         entry, end_addr = init_mem(elf_path, mu)
         init_stack(mu)
         # now print out some registers
@@ -186,7 +217,7 @@ def test_riscv_original():
     print("Emulate RISCV code")
     try:
         # Initialize emulator in RISCV64 mode
-        mu = Uc(UC_ARCH_RISCV, UC_MODE_RISCV64)
+        mu = Uc(UC_ARCH_RISCV, UC_MODE_RISCV32 + CS_MODE_LITTLE_ENDIAN)
 
         # map 2MB memory for this emulation
         mu.mem_map(ADDRESS, 2 * 1024 * 1024)
