@@ -29,6 +29,7 @@ from unicorn import (
     UC_MEM_WRITE,
 )
 
+from syscall_constants import ZKVMSyscalls
 from elftools.elf.elffile import ELFFile
 from pathlib import Path
 import struct
@@ -45,21 +46,12 @@ from capstone import (
 # md = Cs(CS_ARCH_RISCV, CS_MODE_RISCV64 + CS_MODE_LITTLE_ENDIAN)
 md = Cs(CS_ARCH_RISCV, CS_MODE_RISCV32 + CS_MODE_LITTLE_ENDIAN)
 
-"""
-$ cstool riscv64 1305100093850502
- 0  13 05 10 00  addi	a0, zero, 1
- 4  93 85 05 02  addi	a1, a1, 0x20
-"""
-RISCV_CODE = b"\x13\x05\x10\x00\x93\x85\x05\x02"
-
-# memory address where emulation starts
-ADDRESS = 0x10000
-
 
 # callback for tracing basic blocks
 def hook_block(uc, address, size, user_data):
     # print(">>> User data: ", user_data)
-    print(">>> Tracing basic block at 0x%x, block size = 0x%x" % (address, size))
+    # print(">>> Tracing basic block at 0x%x, block size = 0x%x" % (address, size))
+    pass
 
 
 # callback for tracing instructions
@@ -74,15 +66,19 @@ def hook_code(uc, address, size, user_data):
         #     ">>> 2 Tracing instruction at 0x%x, len(data) %x instruction size = 0x%x"
         #     % (address, len(data), size)
         # )
-        # for dd in md.disasm(data, address):
         if len(data) == 0:
             return
-        for dd in md.disasm(data, address):
-            sp = uc.reg_read(UC_RISCV_REG_SP)
-            print(
-                f"[TRACING] 0x{dd.address:x}:\t{dd.mnemonic}\t{dd.op_str}: sp_val: 0x{sp:x}"
-                # f"[TRACING] 0x{dd.address:x}:\t{dd.mnemonic}\t{dd.op_str}"
-            )
+        # for dd in md.disasm(data, address):
+        #     sp = uc.reg_read(UC_RISCV_REG_SP)
+        # if dd.mnemonic == "ecall":
+        #     print(
+        #         f"[TRACING] 0x{dd.address:x}:\t{dd.mnemonic}\t{dd.op_str}: sp_val: 0x{sp:x}"
+        #         # f"[TRACING] 0x{dd.address:x}:\t{dd.mnemonic}\t{dd.op_str}"
+        #     )
+        # print(
+        #     f"[TRACING] 0x{dd.address:x}:\t{dd.mnemonic}\t{dd.op_str}: sp_val: 0x{sp:x}"
+        #     # f"[TRACING] 0x{dd.address:x}:\t{dd.mnemonic}\t{dd.op_str}"
+        # )
     except Exception as e:
         print(f"[TRACING] Error: {e}")
         pass
@@ -173,45 +169,47 @@ def init_stack(uc: Uc):
     stack_addr = MAX_PROG_SIZE
     stack_pointer = stack_addr + 0x400
     stack_size = 0x2000000
-    # STACK_TOP = 0x00200400
     print(f"Mapping stack addr 0x{hex(stack_addr)} - size: {hex(stack_size)}")
     uc.mem_map(stack_addr, stack_size)
-    print("[DEBUG] Mapping done!")
-    # uc.reg_write(UC_RISCV_REG_SP, stack_pointer)
-    # uc.reg_write(UC_RISCV_REG_SP, STACK_TOP)
     print("Stack has been init")
 
 
-# def init_regs(uc: Uc):
-#     pass
-
-
 def hook_intr(uc, intno, user_data):
-    # only handle Linux syscall
     t0 = uc.reg_read(UC_RISCV_REG_T0)  # syscall number
-    print("[instr] got syscall 0x%x ???" % t0)
-    print("[instr] user data", user_data)
     try:
-        # a0 = uc.reg_read(UC_RISCV_REG_A0)
-        # a2 = uc.reg_read(UC_RISCV_REG_A2)
-        # a7 = uc.reg_read(UC_RISCV_REG_A7)
         t0 = uc.reg_read(UC_RISCV_REG_T0)  # syscall number
         a0 = uc.reg_read(UC_RISCV_REG_A0)  # fd
         a1 = uc.reg_read(UC_RISCV_REG_A1)  # addr
         a2 = uc.reg_read(UC_RISCV_REG_A2)  # size
-        if t0 == 0x2:
-            data = uc.mem_read(a1, a2)
-            print(
-                "[SYSCALL] got syscall `%s` - `write`???" % data.decode("utf-8").strip()
-            )
-        if t0 == 0x0:
-            # data = uc.mem_read(a1, a2)
-            print("[SYSCALL] got syscall - `HALT!`")
-            uc.emu_stop()
+        match t0:
+            # case 0x2:
+            case ZKVMSyscalls.WRITE.value:
+                # if t0 == 0x2:
+                data = uc.mem_read(a1, a2)
+                print(
+                    "[SYSCALL] got syscall `%s` - `write`???"
+                    % data.decode("utf-8").strip()
+                )
+            # case 0x0:
+            case ZKVMSyscalls.HALT.value:
+                # data = uc.mem_read(a1, a2)
+                print("[SYSCALL] got syscall - `HALT!`")
+                uc.emu_stop()
+            case ZKVMSyscalls.SHA_EXTEND.value:
+                print("[SYSCALL] got syscall - `SHA_EXTEND!` IGNORING!")
+                return
+            case ZKVMSyscalls.SHA_COMPRESS.value:
+                print("[SYSCALL] got syscall - `SHA_COMPRESS!` IGNORING!")
+                return
+            case ZKVMSyscalls.COMMIT.value:
+                print("[SYSCALL] got syscall - `COMMIT!` IGNORING!")
+                return
+            case _:
+                print("[SYSCALL] got syscall 0x%x - `0x%x`???" % (intno, t0))
+                raise Exception(f"[SYSCALL] got syscall 0x{intno:x} - `0x{t0:x}`???")
         # return
         # x11 = uc.reg_read(UC_RISCV_REG_X11)
         # name = md.insn_name(intno)
-        # print("[SYSCALL] got syscall 0x%x - `%s`???" % (intno, name))
         # print("[SYSCALL] t0: 0x%x" % t0)
         # print("[SYSCALL] a0: 0x%x" % a0)
         # print("[SYSCALL] a1: 0x%x" % a1)
@@ -284,7 +282,7 @@ def run(uc: Uc, entry: int = 0x0, end_addr: int = 0x0):
     print("entry: 0x%x" % entry)
     print("end_addr: ", end_addr)
     # uc.emu_start(entry, end_addr)
-    uc.emu_start(entry, 0x159ED, count=0x3000)
+    uc.emu_start(entry, end_addr, count=0x100000)
     # uc.emu_start(entry, 0x13A6C, count=0x1000)
 
 
@@ -296,19 +294,15 @@ def test_riscv():
         # mu = Uc(UC_ARCH_RISCV, UC_MODE_RISCV64 + CS_MODE_LITTLE_ENDIAN)
         mu = Uc(UC_ARCH_RISCV, UC_MODE_RISCV32 + CS_MODE_LITTLE_ENDIAN)
 
-        # elf_path = Path("riscv")
         elf_path = Path(
             # "riscv"
-            # "../rust-cross/target/riscv32im-succinct-zkvm-elf/release/rust-cross"
+            "../rust-cross/target/riscv32im-succinct-zkvm-elf/release/rust-cross"
             # "/home/semar/Work/rust-riscv/target/riscv32im-risc0-zkvm-elf/release/rust-riscv"
-            "/home/semar/Work/rust-riscv/target/riscv32im-succinct-zkvm-elf/release/rust-riscv"
+            # "/home/semar/Work/rust-riscv/target/riscv32im-succinct-zkvm-elf/release/rust-riscv"
             # "../rust-cross/target/riscv64gc-unknown-none-elf/release/rust-cross"
             # "../rust-cross/target/riscv64gc-unknown-linux-gnu/release/rust-cross"
             # "../rust-cross/target/riscv64gc-unknown-linux-musl/release/rust-cross"
         )
-        # elf_path = Path(
-        #     "../rust-cross/target/riscv64gc-unknown-linux-musl/release/rust-cross"
-        # )
         entry, end_addr = init_mem(elf_path, mu)
         init_stack(mu)
         # now print out some registers
@@ -324,44 +318,6 @@ def test_riscv():
 
     except UcError as e:
         print("UC ERROR ERROR: %s" % e)
-
-
-def test_riscv_original():
-    print("Emulate RISCV code")
-    try:
-        # Initialize emulator in RISCV64 mode
-        mu = Uc(UC_ARCH_RISCV, UC_MODE_RISCV32 + CS_MODE_LITTLE_ENDIAN)
-
-        # map 2MB memory for this emulation
-        mu.mem_map(ADDRESS, 2 * 1024 * 1024)
-
-        # write machine code to be emulated to memory
-        mu.mem_write(ADDRESS, RISCV_CODE)
-
-        # initialize machine registers
-        mu.reg_write(UC_RISCV_REG_A0, 0x1234)
-        # mu.reg_write(UC_RISCV_REG_A1, 0x7890)
-        mu.reg_write(UC_RISCV_REG_A1, 0x0020)
-
-        # tracing all basic blocks with customized callback
-        mu.hook_add(UC_HOOK_BLOCK, hook_block)
-
-        # tracing all instructions with customized callback
-        mu.hook_add(UC_HOOK_CODE, hook_code)
-
-        # emulate machine code in infinite time
-        mu.emu_start(ADDRESS, ADDRESS + len(RISCV_CODE))
-
-        # now print out some registers
-        print(">>> Emulation done. Below is the CPU context")
-
-        a0 = mu.reg_read(UC_RISCV_REG_A0)
-        a1 = mu.reg_read(UC_RISCV_REG_A1)
-        print(">>> A0 = 0x%x" % a0)
-        print(">>> A1 = 0x%x" % a1)
-
-    except UcError as e:
-        print("ERROR: %s" % e)
 
 
 if __name__ == "__main__":
