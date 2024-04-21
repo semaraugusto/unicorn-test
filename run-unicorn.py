@@ -295,13 +295,8 @@ def test_riscv():
         mu = Uc(UC_ARCH_RISCV, UC_MODE_RISCV32 + CS_MODE_LITTLE_ENDIAN)
 
         elf_path = Path(
-            # "riscv"
             "../rust-cross/target/riscv32im-succinct-zkvm-elf/release/rust-cross"
-            # "/home/semar/Work/rust-riscv/target/riscv32im-risc0-zkvm-elf/release/rust-riscv"
-            # "/home/semar/Work/rust-riscv/target/riscv32im-succinct-zkvm-elf/release/rust-riscv"
             # "../rust-cross/target/riscv64gc-unknown-none-elf/release/rust-cross"
-            # "../rust-cross/target/riscv64gc-unknown-linux-gnu/release/rust-cross"
-            # "../rust-cross/target/riscv64gc-unknown-linux-musl/release/rust-cross"
         )
         entry, end_addr = init_mem(elf_path, mu)
         init_stack(mu)
