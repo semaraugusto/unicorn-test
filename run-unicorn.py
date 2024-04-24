@@ -81,7 +81,7 @@ def hook_mem_access(uc, access, address, size, value, user_data):
         print(">>> Memory is being READ at 0x%x, data size = %u" % (address, size))
 
 
-MAX_PROG_SIZE = 0x00200000
+MAX_PROG_SIZE = 0x02000000
 
 
 def init_mem(elf_path: Path, uc: Uc):
@@ -154,9 +154,11 @@ def hook_intr(uc, intno, user_data):
                 print("[SYSCALL] got syscall - `HALT!`")
                 uc.emu_stop()
             case ZKVMSyscalls.SHA_EXTEND.value:
-                print("[SYSCALL] got syscall - `SHA_EXTEND!` IGNORING!")
                 # This seems to happen right after program exits.
                 # I think we can stop emulation here.
+                print(
+                    "[SYSCALL] got syscall - `SHA_EXTEND!`. EXECUTION IS DONE. HALTING!"
+                )
                 uc.emu_stop()
             case ZKVMSyscalls.SHA_COMPRESS.value:
                 print("[SYSCALL] got syscall - `SHA_COMPRESS!` IGNORING!")
