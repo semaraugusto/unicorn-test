@@ -36,6 +36,7 @@ from unicorn import (
 )
 
 from safetensors import safe_open
+from datasets import load_dataset
 from syscall_constants import RiscvSyscalls, ZKVMSyscalls
 from elftools.elf.elffile import ELFFile
 from pathlib import Path
@@ -159,6 +160,71 @@ def load_model(model_path: Path, uc: Uc):
             tensor_packed = struct.pack(f"<{len(tensor_bytes)}s", tensor_bytes)
             uc.mem_write(addr, tensor_packed)
             addr += len(tensor_packed)
+
+
+    # assert len(tokenizer_bytes) + 4 <= TOKENIZER_MAX_SIZE, "INCONSISTENT TOKENIZER SIZE"
+    # print(
+    #     f"Mapping tokenizer addr 0x{hex(TOKENIZER_START)} - size: {hex(len(tokenizer_bytes))}"
+    # )
+    # uc.mem_map(TOKENIZER_START, TOKENIZER_MAX_SIZE)
+    # print("done mapping tokenizer")
+    # print(f"writing len {len(tokenizer_bytes)=} of tokenizer to 0x%x" % TOKENIZER_START)
+    # print(f"writing len {len(tokenizer_bytes)=} of tokenizer to 0x%x" % TOKENIZER_START)
+    # packed_bytes = struct.pack(f"<{len(tokenizer_bytes)}s", bytearray(tokenizer_bytes))
+    # print("[HERE] bytes[0:12]: ", list(map(int, packed_bytes[:12])))
+    uc.mem_write(MODEL_START, struct.pack("<I", 0x67676D6C))
+    # uc.mem_write(MODEL_START + 4, struct.pack("<I", len(tokenizer_bytes)))
+    # uc.mem_write(MODEL_START + 8, packed_bytes)
+    print("done loading tokenizer")
+
+def load_input(uc: Uc):
+    global TOKENIZER_START, TOKENIZER_MAX_SIZE
+    print("loading tokenizer")
+    # tokenizer_bytes = tokenizer_path.open("rb").read()
+    addr = TOKENIZER_START
+    uc.mem_map(TOKENIZER_START, TOKENIZER_MAX_SIZE)
+    dataset = load_dataset("mnist")
+    # print(f"dataset {dataset}")
+    test_image = np.array(dataset["test"][0]['image'])
+    print(f"test_image {test_image}")
+    # print(f"test_image {test_image.dtype}")
+    # print(f"test_image {test_image.shape}")
+    uc.mem_write(addr, struct.pack("<I", test_image.shape[0]))
+    addr += 4
+    uc.mem_write(addr, struct.pack("<I", test_image.shape[1]))
+    addr += 4
+    num_elements = test_image.shape[0] * test_image.shape[1]
+    packed_image = struct.pack(f"<{num_elements}s", bytearray(test_image.tobytes()))
+    uc.mem_write(addr, packed_image)
+    addr += len(packed_image)
+    # num_tensors = len(f.keys())
+    # print(f"num_tensors: {num_tensors}")
+    # uc.mem_write(addr, struct.pack("<I", 0x67676D6C))
+    # addr += 4
+    # uc.mem_write(addr, struct.pack("<I", num_tensors))
+    # addr += 4
+    # for key in f.keys():
+    #     tensor = f.get_tensor(key)
+    #     print(f"key: {key}, tensor: {tensor}")
+    #     name_bytes = struct.pack(f"<{len(key)}s", key.encode("utf-8"))
+    #     name_len = len(name_bytes)
+    #     uc.mem_write(addr, struct.pack("<I", name_len))
+    #     addr += 4
+    #     uc.mem_write(addr, name_bytes)
+    #     addr += name_len
+    #     print(f"name_len: {name_len}, name_bytes: {name_bytes}")
+    #     uc.mem_write(addr, struct.pack("<I", tensor.dim()))
+    #     addr += 4
+    #     print(f"tensor_dim: {tensor.dim()}")
+    #     for dim in range(tensor.dim()):
+    #         uc.mem_write(addr, struct.pack("<I", tensor.shape[dim]))
+    #         addr += 4
+    #         print(f"tensor.shape[dim]: {tensor.shape[dim]}")
+    #
+    #     tensor_bytes = tensor.numpy().astype(np.float32).tobytes()
+    #     tensor_packed = struct.pack(f"<{len(tensor_bytes)}s", tensor_bytes)
+    #     uc.mem_write(addr, tensor_packed)
+    #     addr += len(tensor_packed)
 
 
     # assert len(tokenizer_bytes) + 4 <= TOKENIZER_MAX_SIZE, "INCONSISTENT TOKENIZER SIZE"
@@ -368,6 +434,7 @@ def test_riscv():
         )
         entry, end_addr = init_mem(elf_path, uc)
         load_model(model_path, uc)
+        load_input(uc)
         init_stack(uc)
         # now print out some registers
         run(uc, entry, end_addr)
