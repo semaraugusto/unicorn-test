@@ -48,8 +48,8 @@ from capstone import (
     CS_MODE_LITTLE_ENDIAN,
 )
 
-# md = Cs(CS_ARCH_RISCV, CS_MODE_RISCV64 + CS_MODE_LITTLE_ENDIAN)
-md = Cs(CS_ARCH_RISCV, CS_MODE_RISCV32 + CS_MODE_LITTLE_ENDIAN)
+md = Cs(CS_ARCH_RISCV, CS_MODE_RISCV64 + CS_MODE_LITTLE_ENDIAN)
+# md = Cs(CS_ARCH_RISCV, CS_MODE_RISCV32 + CS_MODE_LITTLE_ENDIAN)
 
 
 # callback for tracing basic blocks
@@ -414,8 +414,8 @@ def run(uc: Uc, entry: int = 0x0, end_addr: int = 0x0):
 # Test RISCV
 def test_riscv():
     print("Emulate RISCV code")
-    uc = Uc(UC_ARCH_RISCV, UC_MODE_RISCV32 + CS_MODE_LITTLE_ENDIAN)
-    # uc = Uc(UC_ARCH_RISCV, UC_MODE_RISCV64 + CS_MODE_LITTLE_ENDIAN)
+    # uc = Uc(UC_ARCH_RISCV, UC_MODE_RISCV32 + CS_MODE_LITTLE_ENDIAN)
+    uc = Uc(UC_ARCH_RISCV, UC_MODE_RISCV64 + CS_MODE_LITTLE_ENDIAN)
     try:
         # Initialize emulator in RISCV64 mode
         # mu = Uc(UC_ARCH_RISCV, UC_MODE_RISCV64 + CS_MODE_LITTLE_ENDIAN)
@@ -424,7 +424,8 @@ def test_riscv():
         )
 
         elf_path = Path(
-            "../rust-cross/target/riscv32im-succinct-zkvm-elf/release/rust-cross"
+            # "../rust-cross/target/riscv32im-succinct-zkvm-elf/release/rust-cross"
+            "../rust-cross/target/riscv64im-unicorn-zkvm-elf/release/rust-cross"
             # "../rust-cross/target/riscv64gc-unknown-none-elf/release/rust-cross"
             # "../rust-riscv/target/riscv64gc-unknown-linux-gnu/release/rust-riscv"
             # "../rust-riscv/target/riscv64gc-unknown-linux-musl/release/rust-riscv"
