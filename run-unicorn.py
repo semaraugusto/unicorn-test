@@ -69,13 +69,13 @@ def hook_code(uc, address, size, user_data):
         # )
         if len(data) == 0:
             return
-        # for dd in md.disasm(data, address):
-        #     sp = uc.reg_read(UC_RISCV_REG_SP)
-        #     if dd.mnemonic == "ecall":
-        #         print(
-        #             f"[TRACING] 0x{dd.address:x}:\t{dd.mnemonic}\t{dd.op_str}: sp_val: 0x{sp:x}"
-        #             # f"[TRACING] 0x{dd.address:x}:\t{dd.mnemonic}\t{dd.op_str}"
-        #         )
+        for dd in md.disasm(data, address):
+            sp = uc.reg_read(UC_RISCV_REG_SP)
+            if dd.mnemonic == "ecall":
+                print(
+                    f"[TRACING] 0x{dd.address:x}:\t{dd.mnemonic}\t{dd.op_str}: sp_val: 0x{sp:x}"
+                    # f"[TRACING] 0x{dd.address:x}:\t{dd.mnemonic}\t{dd.op_str}"
+                )
     #         print(
     #             f"[TRACING] 0x{dd.address:x}:\t{dd.mnemonic}\t{dd.op_str}: sp_val: 0x{sp:x}"
     #             # f"[TRACING] 0x{dd.address:x}:\t{dd.mnemonic}\t{dd.op_str}"
@@ -137,6 +137,7 @@ def load_model(model_path: Path, uc: Uc):
         uc.mem_write(addr, struct.pack("<I", 0x67676D6C))
         addr += 4
         uc.mem_write(addr, struct.pack("<I", num_tensors))
+        print("num_tensors packed: ", struct.pack("<I", num_tensors))
         addr += 4
         for key in f.keys():
             tensor = f.get_tensor(key)
@@ -299,9 +300,9 @@ def hook_intr(uc, intno, user_data):
         a0 = uc.reg_read(UC_RISCV_REG_A0)  # fd
         a1 = uc.reg_read(UC_RISCV_REG_A1)  # addr
         a2 = uc.reg_read(UC_RISCV_REG_A2)  # size
-        # a7 = uc.reg_read(UC_RISCV_REG_A7)  # fd
+        a7 = uc.reg_read(UC_RISCV_REG_A7)  # fd
         # print("[SYSCALL] t0: 0x%x a7: 0x%x a7: %d:" % (t0, a7, a7))
-        # print("[SYSCALL] t0: 0x%x a7: 0x%x a7: %d: args(%d %d %d)" % (t0, a7, a7, a0, a1, a2))
+        print("[SYSCALL] t0: 0x%x a7: 0x%x a7: %d: args(%d %d %d)" % (t0, a7, a7, a0, a1, a2))
         match t0:
         # match a7:
             # case RiscvSyscalls.SYS_getuid.value:
@@ -329,6 +330,8 @@ def hook_intr(uc, intno, user_data):
                 uc.emu_stop()
             case ZKVMSyscalls.SHA_COMPRESS.value:
                 print("[SYSCALL] [SHA_COMPRESS!] - `SHA_COMPRESS!` IGNORING!")
+            case ZKVMSyscalls.COMMIT.value:
+                print("[SYSCALL] [COMMIT!] - `COMMIT!` IGNORING!")
             case _:
                 print("[SYSCALL] [UNKNOWN] 0x%x - `0x%x`???" % (intno, t0))
                 # raise Exception(f"[SYSCALL] [UNKNOWN] 0x{intno:x} - `0x{t0:x}`???")
