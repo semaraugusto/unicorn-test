@@ -48,8 +48,8 @@ from capstone import (
     CS_MODE_LITTLE_ENDIAN,
 )
 
-# md = Cs(CS_ARCH_RISCV, CS_MODE_RISCV64 + CS_MODE_LITTLE_ENDIAN)
-md = Cs(CS_ARCH_RISCV, CS_MODE_RISCV32 + CS_MODE_LITTLE_ENDIAN)
+md = Cs(CS_ARCH_RISCV, CS_MODE_RISCV64 + CS_MODE_LITTLE_ENDIAN)
+# md = Cs(CS_ARCH_RISCV, CS_MODE_RISCV32 + CS_MODE_LITTLE_ENDIAN)
 
 
 # callback for tracing basic blocks
@@ -69,17 +69,17 @@ def hook_code(uc, address, size, user_data):
         # )
         if len(data) == 0:
             return
-        # for dd in md.disasm(data, address):
-        #     sp = uc.reg_read(UC_RISCV_REG_SP)
-        #     if dd.mnemonic == "ecall":
-        #         print(
-        #             f"[TRACING] 0x{dd.address:x}:\t{dd.mnemonic}\t{dd.op_str}: sp_val: 0x{sp:x}"
-        #             # f"[TRACING] 0x{dd.address:x}:\t{dd.mnemonic}\t{dd.op_str}"
-        #         )
-    #         print(
-    #             f"[TRACING] 0x{dd.address:x}:\t{dd.mnemonic}\t{dd.op_str}: sp_val: 0x{sp:x}"
-    #             # f"[TRACING] 0x{dd.address:x}:\t{dd.mnemonic}\t{dd.op_str}"
-    #         )
+        for dd in md.disasm(data, address):
+            sp = uc.reg_read(UC_RISCV_REG_SP)
+            # if dd.mnemonic == "ecall":
+            #     print(
+            #         f"[TRACING] 0x{dd.address:x}:\t{dd.mnemonic}\t{dd.op_str}: sp_val: 0x{sp:x}"
+            #         # f"[TRACING] 0x{dd.address:x}:\t{dd.mnemonic}\t{dd.op_str}"
+            #     )
+            # print(
+            #     f"[TRACING] 0x{dd.address:x}:\t{dd.mnemonic}\t{dd.op_str}: sp_val: 0x{sp:x}"
+            #     # f"[TRACING] 0x{dd.address:x}:\t{dd.mnemonic}\t{dd.op_str}"
+            # )
     except Exception as e:
         print(f"[TRACING] Error: {e}")
         pass
@@ -284,10 +284,11 @@ def init_stack(uc: Uc):
     global TOKENIZER_END
     # stack_addr = STACK_ADDR
     stack_addr = MODEL_END + 0x1000
-    stack_size = 0x20000000
-    stack_pointer = stack_addr + (stack_size//2)
+    # stack_size = 0x8000_0000
+    stack_size = 0xf000_0000
+    # stack_pointer = stack_addr + (stack_size//2)
     print(f"Mapping stack addr 0x{hex(stack_addr)} - size: {hex(stack_size)}")
-    uc.reg_write(UC_RISCV_REG_SP, stack_pointer)
+    # uc.reg_write(UC_RISCV_REG_SP, stack_pointer)
     uc.mem_map(stack_addr, stack_size)
     print("Stack has been init")
 
@@ -295,6 +296,7 @@ def init_stack(uc: Uc):
 def hook_intr(uc, intno, user_data):
     t0 = uc.reg_read(UC_RISCV_REG_T0)  # syscall number
     try:
+        sp = uc.reg_read(UC_RISCV_REG_SP)  # syscall number
         t0 = uc.reg_read(UC_RISCV_REG_T0)  # syscall number
         a0 = uc.reg_read(UC_RISCV_REG_A0)  # fd
         a1 = uc.reg_read(UC_RISCV_REG_A1)  # addr
@@ -316,7 +318,7 @@ def hook_intr(uc, intno, user_data):
             case ZKVMSyscalls.WRITE.value:
                 # if t0 == 0x2:
                 data = uc.mem_read(a1, a2)
-                print("[SYSCALL] [WRITE] `%s`" % data.decode("utf-8").strip())
+                print("[SYSCALL] [WRITE] SP: 0x%x `%s`" % (sp, data.decode("utf-8").strip()))
             # case 0x0:
             case ZKVMSyscalls.HALT.value:
                 # data = uc.mem_read(a1, a2)
@@ -364,8 +366,8 @@ def hook_intr(uc, intno, user_data):
 def hook_mem_invalid(uc, access, address, size, value, user_data):
     """For Debugging Use Only"""
     eip = uc.reg_read(UC_RISCV_REG_PC)
-    t3 = uc.reg_read(UC_RISCV_REG_T3)
-    print("T3: 0x%x" % t3)
+    # t3 = uc.reg_read(UC_RISCV_REG_T3)
+    # print("T3: 0x%x" % t3)
     if access == UC_MEM_WRITE:
         print("invalid WRITE of 0x%x at 0x%X, data size = %u, data value = 0x%x" % (address, eip, size, value))
     if access == UC_MEM_READ:
@@ -404,7 +406,7 @@ def run(uc: Uc, entry: int = 0x0, end_addr: int = 0x0):
         # entry = 0x000ce002a
         # uc.reg_write(UC_RISCV_REG_PC, entry)
         # uc.emu_start(entry, end_addr, timeout=1 * MINUTE, count=0x200)
-        uc.emu_start(entry, end_addr, timeout=30 * SECOND)
+        uc.emu_start(entry, end_addr, timeout=60 * SECOND)
         # uc.emu_start(entry, end_addr, timeout=1 * MINUTE)
     except KeyboardInterrupt as e:
         print("KeyboardInterrupt: %s" % e)
@@ -414,8 +416,8 @@ def run(uc: Uc, entry: int = 0x0, end_addr: int = 0x0):
 # Test RISCV
 def test_riscv():
     print("Emulate RISCV code")
-    uc = Uc(UC_ARCH_RISCV, UC_MODE_RISCV32 + CS_MODE_LITTLE_ENDIAN)
-    # uc = Uc(UC_ARCH_RISCV, UC_MODE_RISCV64 + CS_MODE_LITTLE_ENDIAN)
+    # uc = Uc(UC_ARCH_RISCV, UC_MODE_RISCV32 + CS_MODE_LITTLE_ENDIAN)
+    uc = Uc(UC_ARCH_RISCV, UC_MODE_RISCV64 + CS_MODE_LITTLE_ENDIAN)
     try:
         # Initialize emulator in RISCV64 mode
         # mu = Uc(UC_ARCH_RISCV, UC_MODE_RISCV64 + CS_MODE_LITTLE_ENDIAN)
@@ -424,7 +426,8 @@ def test_riscv():
         )
 
         elf_path = Path(
-            "../rust-cross/target/riscv32im-succinct-zkvm-elf/release/rust-cross"
+            # "../rust-cross/target/riscv32im-succinct-zkvm-elf/release/rust-cross"
+            "../rust-cross/target/riscv64im-unicorn-zkvm-elf/release/rust-cross"
             # "../rust-cross/target/riscv64gc-unknown-none-elf/release/rust-cross"
             # "../rust-riscv/target/riscv64gc-unknown-linux-gnu/release/rust-riscv"
             # "../rust-riscv/target/riscv64gc-unknown-linux-musl/release/rust-riscv"
